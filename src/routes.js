@@ -1,10 +1,6 @@
-import { Dataset, createCheerioRouter, utils } from "crawlee";
+import { Dataset, createCheerioRouter, utils, log } from "crawlee";
 
 export const router = createCheerioRouter();
-
-let enqueuedCount = 0;
-let processedCount = 0;
-let errorCount = 0;
 
 router.addDefaultHandler(async ({ enqueueLinks, log }) => {
   const currentTime = new Date().toString();
@@ -17,45 +13,76 @@ router.addDefaultHandler(async ({ enqueueLinks, log }) => {
     globs: ["https://app.hellothematic.com/creator/profile/**"],
     label: "creator",
   });
-  enqueuedCount += 1;
+  //if it doesnt match these two, it will go to the default handler
+  await enqueueLinks({
+    globs: ["https://app.hellothematic.com/**"],
+    label: "default",
+  });
 });
 
-router.addHandler("artist", async ({ request, $, log }) => {
+router.addHandler("artist", async ({ request, $, log, e }) => {
   const currentTime = new Date().toString();
+
   try {
     const title = $("title").text();
     log.info(`[${currentTime}] ${title} - ${request.loadedUrl}`);
     const name = $("div.name-wrapper h1").text();
+    log.info(`[${currentTime}] ${name}`);
     const imgSrc = $("img.profile-image-round").attr("src");
-    const bio = $(".person-description").text();
+    log.info(`[${currentTime}] ${imgSrc}`);
+    const bio = $("div.person-description").text();
+    log.info(`[${currentTime}] ${bio}`);
     const socialLinks = utils.social.parseHandlesFromHtml($("ul.social-media-links").html());
     const profileType = "artist";
+
+    // Initialize variables for separate social link fields
+    let soundcloudURL = "";
+    let spotifyURL = "";
+    let applemusicURL = "";
+
+    // Iterate over the social links and store the SoundCloud, Spotify, and Apple Music URLs separately
+    socialLinks.forEach((link) => {
+      if (/soundcloud/.test(link.url)) {
+        soundcloudURL = link.url;
+      } else if (/spotify/.test(link.url)) {
+        spotifyURL = link.url;
+      } else if (/applemusic/.test(link.url)) {
+        applemusicURL = link.url;
+      }
+    });
 
     await Dataset.pushData({
       url: request.loadedUrl,
       title,
       name,
-      bio,
       imgSrc,
+      bio,
       socialLinks,
+      soundcloudURL,
+      spotifyURL,
+      applemusicURL,
       profileType,
     });
-    processedCount += 1;
   } catch (error) {
     log.error(`[${currentTime}] Error processing URL: ${error.message}`);
     errorCount += 1;
   }
 });
-
 router.addHandler("creator", async ({ request, $, log }) => {
   const currentTime = new Date().toString();
+  let processedCount = 0;
+  let errorCount = 0;
   try {
     const title = $("title").text();
     log.info(`[${currentTime}] ${title} - ${request.loadedUrl}`);
-    const name = $("div.creator-name-wrapper h1").text();
-    const imgSrc = $("img.creator-profile-image-round").attr("src");
-    const bio = $(".creator-bio").text();
-    const socialLinks = utils.social.parseHandlesFromHtml($("ul.creator-social-media-links").html());
+    const name = $("div.name-wrapper h1").text();
+    log.info(`[${currentTime}] ${name}`);
+    const imgSrc = $("img.profile-image-round").attr("src");
+    log.info(`[${currentTime}] ${imgSrc}`);
+    const bio = $("div.person-description").text();
+    log.info(`[${currentTime}] ${bio}`);
+    const socialLinks = utils.social.parseHandlesFromHtml($("ul.social-media-links").html());
+
     const profileType = "creator";
 
     await Dataset.pushData({
@@ -67,9 +94,7 @@ router.addHandler("creator", async ({ request, $, log }) => {
       socialLinks,
       profileType,
     });
-    processedCount += 1;
   } catch (error) {
     log.error(`[${currentTime}] Error processing URL: ${error.message}`);
-    errorCount += 1;
   }
 });
